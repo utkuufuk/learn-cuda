@@ -12,9 +12,9 @@ __global__
 void gaussian_blur(const unsigned char* const inputChannel,
                    unsigned char* const outputChannel,
                    int numRows, 
-		   int numCols,
+                   int numCols,
                    const float* const filter, 
-		   const int filterWidth)
+                   const int filterWidth)
 {		
 	__shared__ int result;
 
@@ -55,7 +55,7 @@ void separateChannels(const uchar4* const inputImageRGBA,
 
 	const int index = threadIndex2D.y * numCols + threadIndex2D.x;
 
-	//make sure we don't try and access memory outside the image by having any threads mapped there return early
+    // avoid accessing the memory outside the image by having any threads mapped there return early
 	if (threadIndex2D.x >= numCols || threadIndex2D.y >= numRows)
     {
 		return;
@@ -74,10 +74,11 @@ void recombineChannels(const unsigned char* const redChannel,
                        int numRows,
                        int numCols)
 {
-	const int2 thread_2D_pos = make_int2( blockIdx.x * blockDim.x + threadIdx.x, blockIdx.y * blockDim.y + threadIdx.y);
+	const int2 thread_2D_pos = make_int2(blockIdx.x * blockDim.x + threadIdx.x, 
+                                         blockIdx.y * blockDim.y + threadIdx.y);
 	const int thread_1D_pos = thread_2D_pos.y * numCols + thread_2D_pos.x;
 
-	//make sure we don't try and access memory outside the image by having any threads mapped there return early
+    // avoid accessing the memory outside the image by having any threads mapped there return early
 	if (thread_2D_pos.x >= numCols || thread_2D_pos.y >= numRows)
 	{
 		return;
@@ -99,15 +100,16 @@ void allocateMemoryAndCopyToGPU(const size_t numRowsImage, const size_t numColsI
 	checkCudaErrors(cudaMalloc(&d_green, sizeof(unsigned char) * numRowsImage * numColsImage));
 	checkCudaErrors(cudaMalloc(&d_blue,  sizeof(unsigned char) * numRowsImage * numColsImage));
 
-	checkCudaErrors(cudaMalloc(&d_filter, sizeof(float) * filterWidth * filterWidth));
-	checkCudaErrors(cudaMemcpy(d_filter, h_filter, sizeof(float) * filterWidth * filterWidth, cudaMemcpyHostToDevice));
+    size_t filterMemSize = filterWidth * filterWidth * sizeof(float);
+	checkCudaErrors(cudaMalloc(&d_filter, filterMemSize));
+	checkCudaErrors(cudaMemcpy(d_filter, h_filter, filterMemSize, cudaMemcpyHostToDevice));
 }
 
 void your_gaussian_blur(const uchar4 * const h_inputImageRGBA, 
-			uchar4 * const d_inputImageRGBA,
+                        uchar4 * const d_inputImageRGBA,
                         uchar4* const d_outputImageRGBA, 
-			const size_t numRows, 
-			const size_t numCols,
+                        const size_t numRows, 
+                        const size_t numCols,
                         unsigned char *d_redBlurred, 
                         unsigned char *d_greenBlurred, 
                         unsigned char *d_blueBlurred,
@@ -116,7 +118,8 @@ void your_gaussian_blur(const uchar4 * const h_inputImageRGBA,
 	// görüntü boyutu 32x32 nin tam katı olmadığı için gereğinden fazla thread oluşturmak gerekiyor
 	const dim3 threadsPerBlock(BLOCK_COLS, BLOCK_ROWS);
 	const dim3 numBlocks(1 + (numCols / threadsPerBlock.x), 1 + (numRows / threadsPerBlock.y));
-	printf("Block size: %dx%d Grid Size: %dx%d\n", threadsPerBlock.x, threadsPerBlock.y, numBlocks.x, numBlocks.y);
+	printf("Block size: %dx%d Grid Size: %dx%d\n", threadsPerBlock.x, threadsPerBlock.y,
+	                                               numBlocks.x, numBlocks.y);
 
 	separateChannels<<<numBlocks, threadsPerBlock>>>(d_inputImageRGBA, numRows, numCols, d_red, d_green, d_blue);
 	cudaDeviceSynchronize(); 
