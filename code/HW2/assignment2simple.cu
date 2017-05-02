@@ -2,11 +2,14 @@
 #include "utils.h"
 #include <stdio.h>
 
+#define BLOCK_ROWS 32
+#define BLOCK_COLS 32
+
 unsigned char *d_red, *d_green, *d_blue;
 float         *d_filter;
 
 __global__
-void gaussian_blur(const unsigned char* const inputChannel,
+void gaussianBlur(const unsigned char* const inputChannel,
                    unsigned char* const outputChannel,
                    int numRows, 
 		           int numCols,
@@ -75,7 +78,7 @@ void recombineChannels(const unsigned char* const redChannel,
 
     const int thread_1D_pos = thread_2D_pos.y * numCols + thread_2D_pos.x;
 
-    //make sure we don't try and access memory outside the image by having any threads mapped there return early
+    // avoid accessing the memory outside the image by having any threads mapped there return early
     if (thread_2D_pos.x >= numCols || thread_2D_pos.y >= numRows)
     {
         return;
@@ -96,40 +99,42 @@ void allocateMemoryAndCopyToGPU(const size_t numRowsImage, const size_t numColsI
     checkCudaErrors(cudaMalloc(&d_green, sizeof(unsigned char) * numRowsImage * numColsImage));
     checkCudaErrors(cudaMalloc(&d_blue,  sizeof(unsigned char) * numRowsImage * numColsImage));
 
-    checkCudaErrors(cudaMalloc(&d_filter,  sizeof(float) * filterWidth * filterWidth));
-    checkCudaErrors(cudaMemcpy(d_filter, h_filter, sizeof(float) * filterWidth * filterWidth, cudaMemcpyHostToDevice));
+    size_t filterMemSize = filterWidth * filterWidth * sizeof(float);
+    checkCudaErrors(cudaMalloc(&d_filter,  filterMemSize));
+    checkCudaErrors(cudaMemcpy(d_filter, h_filter, filterMemSize, cudaMemcpyHostToDevice));
 }
 
-void your_gaussian_blur(const uchar4* const h_inputImageRGBA, 
-	            		uchar4* const d_inputImageRGBA,
-                        uchar4* const d_outputImageRGBA, 
+void your_gaussianBlur(const uchar4* const h_inputRGBA, 
+	            		uchar4* const d_inputRGBA,
+                        uchar4* const d_outputRGBA, 
                			const size_t numRows, 
 			            const size_t numCols,
-                        unsigned char *d_redBlurred, 
-                        unsigned char *d_greenBlurred, 
-                        unsigned char *d_blueBlurred,
+                        unsigned char *d_RedBlur, 
+                        unsigned char *d_greenBlur, 
+                        unsigned char *d_blueBlur,
                         const int filterWidth)
 {
-    const dim3 blockSize(32, 32);
-    const dim3 gridSize(numCols / blockSize.x + 1, numRows / blockSize.y + 1);
+    const dim3 threads(BLOCK_COLS, BLOCK_ROWS);
+    const dim3 blocks(numCols / threads.x + 1, numRows / threads.y + 1);
 
-    separateChannels<<<gridSize, blockSize>>>(d_inputImageRGBA, numRows, numCols, d_red, d_green, d_blue);
+    separateChannels<<<blocks, threads>>>(d_inputRGBA, numRows, numCols, d_red, d_green, d_blue);
     cudaDeviceSynchronize(); 
     checkCudaErrors(cudaGetLastError());
 
-    gaussian_blur<<<gridSize, blockSize>>>(d_red, d_redBlurred, numRows, numCols, d_filter, filterWidth);
+    gaussianBlur<<<blocks, threads>>>(d_red, d_RedBlur, numRows, numCols, d_filter, filterWidth);
     cudaDeviceSynchronize(); 
     checkCudaErrors(cudaGetLastError());
 
-    gaussian_blur<<<gridSize, blockSize>>>(d_green, d_greenBlurred, numRows, numCols, d_filter, filterWidth);
+    gaussianBlur<<<blocks, threads>>>(d_green, d_greenBlur, numRows, numCols, d_filter, filterWidth);
     cudaDeviceSynchronize(); 
     checkCudaErrors(cudaGetLastError());
 
-    gaussian_blur<<<gridSize, blockSize>>>(d_blue, d_blueBlurred, numRows, numCols, d_filter, filterWidth);
+    gaussianBlur<<<blocks, threads>>>(d_blue, d_blueBlur, numRows, numCols, d_filter, filterWidth);
     cudaDeviceSynchronize(); 
     checkCudaErrors(cudaGetLastError());
 
-    recombineChannels<<<gridSize, blockSize>>>(d_redBlurred, d_greenBlurred, d_blueBlurred, d_outputImageRGBA, numRows, numCols);
+    recombineChannels<<<blocks, threads>>>
+                    (d_RedBlur, d_greenBlur, d_blueBlur, d_outputRGBA, numRows, numCols);
     cudaDeviceSynchronize(); 
     checkCudaErrors(cudaGetLastError());
 }
