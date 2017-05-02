@@ -6,16 +6,16 @@
 #define BLOCK_COLS 32
 
 unsigned char *d_red, *d_green, *d_blue;
-float         *d_filter;
-int 		  *d_redTemp, *d_greenTemp, *d_blueTemp;
+float *d_filter;
+int *d_redTemp, *d_greenTemp, *d_blueTemp;
 
 __global__
 void gaussian_blur(const unsigned char* const inputChannel,
                    int* outputChannel,
                    int numRows, 
-				   int numCols,
+	  	   int numCols,
                    const float* const filter, 
-				   const int filterWidth)
+		   const int filterWidth)
 {		
 	int threadRowOffset = (-filterWidth / 2) + threadIdx.y; 
 	int threadColOffset = (-filterWidth / 2) + threadIdx.x;
@@ -38,7 +38,7 @@ void dalga(unsigned char* const outputChannel, int* inputChannel, int numRows, i
 
 	//make sure we don't try and access memory outside the image by having any threads mapped there return early
 	if (threadIndex2D.x >= numCols || threadIndex2D.y >= numRows)
-    {
+    	{
 		return;
 	}
 	outputChannel[index] = inputChannel[index];
@@ -53,13 +53,13 @@ void separateChannels(const uchar4* const inputImageRGBA,
                       unsigned char* const blueChannel)
 {	
 	const int2 threadIndex2D = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
-                                         blockIdx.y * blockDim.y + threadIdx.y);
+                                             blockIdx.y * blockDim.y + threadIdx.y);
 
 	const int index = threadIndex2D.y * numCols + threadIndex2D.x;
 
 	//make sure we don't try and access memory outside the image by having any threads mapped there return early
 	if (threadIndex2D.x >= numCols || threadIndex2D.y >= numRows)
-    {
+    	{
 		return;
 	}
 	uchar4 rgba = inputImageRGBA[index];				
@@ -153,15 +153,26 @@ void your_gaussian_blur(const uchar4 * const h_inputImageRGBA,
 	printf("Block size: %dx%d Grid Size: %dx%d\n", blockSize.x, blockSize.y, gridSize.x, gridSize.y);
 	
 	gaussian_blur<<<gridSize, blockSize>>>(d_red, d_redTemp, numRows, numCols, d_filter, filterWidth);
+	cudaDeviceSynchronize(); 
+	checkCudaErrors(cudaGetLastError());
+
 	gaussian_blur<<<gridSize, blockSize>>>(d_green, d_greenTemp, numRows, numCols, d_filter, filterWidth);
+	cudaDeviceSynchronize(); 
+	checkCudaErrors(cudaGetLastError());
+
 	gaussian_blur<<<gridSize, blockSize>>>(d_blue, d_blueTemp, numRows, numCols, d_filter, filterWidth);
 	cudaDeviceSynchronize(); 
 	checkCudaErrors(cudaGetLastError());
 	
 	dalga<<<numBlocks, threadsPerBlock>>>(d_redBlurred, d_redTemp, numRows, numCols);
+	cudaDeviceSynchronize(); 
+	checkCudaErrors(cudaGetLastError());
+
 	dalga<<<numBlocks, threadsPerBlock>>>(d_greenBlurred, d_greenTemp, numRows, numCols);
-	dalga<<<numBlocks, threadsPerBlock>>>(d_blueBlurred, d_blueTemp, numRows, numCols);
+	cudaDeviceSynchronize(); 
+	checkCudaErrors(cudaGetLastError());
 	
+	dalga<<<numBlocks, threadsPerBlock>>>(d_blueBlurred, d_blueTemp, numRows, numCols);
 	cudaDeviceSynchronize(); 
 	checkCudaErrors(cudaGetLastError());
 	

@@ -12,9 +12,9 @@ __global__
 void gaussian_blur(const unsigned char* const inputChannel,
                    unsigned char* const outputChannel,
                    int numRows, 
-				   int numCols,
+		   int numCols,
                    const float* const filter, 
-				   const int filterWidth)
+		   const int filterWidth)
 {		
 	__shared__ int result;
 
@@ -104,10 +104,10 @@ void allocateMemoryAndCopyToGPU(const size_t numRowsImage, const size_t numColsI
 }
 
 void your_gaussian_blur(const uchar4 * const h_inputImageRGBA, 
-						uchar4 * const d_inputImageRGBA,
+			uchar4 * const d_inputImageRGBA,
                         uchar4* const d_outputImageRGBA, 
-						const size_t numRows, 
-						const size_t numCols,
+			const size_t numRows, 
+			const size_t numCols,
                         unsigned char *d_redBlurred, 
                         unsigned char *d_greenBlurred, 
                         unsigned char *d_blueBlurred,
