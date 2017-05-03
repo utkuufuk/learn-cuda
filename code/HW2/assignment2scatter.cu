@@ -2,8 +2,8 @@
 #include "utils.h"
 #include <stdio.h>
 
-#define BLOCK_ROWS 32
-#define BLOCK_COLS 32
+const int BLOCK_ROWS = 32;
+const int BLOCK_COLS = 32;
 
 unsigned char *d_red, *d_green, *d_blue;
 float *d_filter;

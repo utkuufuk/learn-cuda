@@ -2,8 +2,9 @@
 #include "utils.h"
 #include <stdio.h>
 
-#define BLOCK_ROWS 32
-#define BLOCK_COLS 32
+const int BLOCK_ROWS = 32;
+const int BLOCK_COLS = 32;
+const int MAX_THREADS_PER_BLOCK = 1024;
 
 unsigned char *d_red, *d_green, *d_blue;
 float         *d_filter;
@@ -13,32 +14,50 @@ void gaussianBlur(const unsigned char* const inputChannel,
                   unsigned char* const outputChannel,
                   int numRows, 
                   int numCols,
+                  int numThreadMatrices,
                   const float* const filter, 
                   const int filterWidth)
 {		
-    __shared__ float result;
-    
-	if (threadIdx.x == 0 && threadIdx.y == 0)
+    // each 9x9 thread matrix in a thread block will write
+    // its output into the corresponding location in this buffer
+    extern __shared__ float sharedBuffer[];
+     
+    // calculate the center pixel location of the thread 
+    int centerColIndex = blockIdx.x * numThreadMatrices + threadIdx.x;
+    int centerRowIndex = blockIdx.y;
+	int centerPixelIndex = centerRowIndex * numCols + centerColIndex;
+
+    // return if the center index is out of bounds
+    if (centerColIndex >= numCols || centerRowIndex >= numRows)
+    {
+        return;
+    }
+
+    // let the first thread in each thread matrix initialize the shared buffer
+	if (threadIdx.y == 0 && threadIdx.z == 0)
 	{
-		result = 0;
+        sharedBuffer[threadIdx.x] = 0;
 	}
 	__syncthreads();
 
-	int threadRowOffset = (-filterWidth / 2) + threadIdx.y; 
-	int threadColOffset = (-filterWidth / 2) + threadIdx.x;
-	int threadPixelRows = min(max(blockIdx.y + threadRowOffset, 0), static_cast<int>(numRows - 1));
-	int threadPixelCols = min(max(blockIdx.x + threadColOffset, 0), static_cast<int>(numCols - 1));
+    // calculate the corresponding filter coefficient index for this thread
+	int rowOffset = (-filterWidth / 2) + threadIdx.z; 
+	int colOffset = (-filterWidth / 2) + threadIdx.y;
+	int filterIndex = threadIdx.z * filterWidth + threadIdx.y;
+
+    // calculate the mapped rows and columns of each thread 
+	int threadRowIndex = min(max(centerRowIndex + rowOffset, 0), static_cast<int>(numRows - 1));
+	int threadColIndex = min(max(centerColIndex + colOffset, 0), static_cast<int>(numCols - 1));
+	int threadPixelIndex = threadRowIndex * numCols + threadColIndex;
 	
-	int sourcePixelIndex = blockIdx.y * numCols + blockIdx.x;
-	int threadPixelIndex = threadPixelRows * numCols + threadPixelCols;
-	int filterIndex = threadIdx.y * filterWidth + threadIdx.x;
-	
-	atomicAdd(&result, inputChannel[threadPixelIndex] * filter[filterIndex]);
+	// atomically update the weighted sum for the center pixel
+	atomicAdd(&sharedBuffer[threadIdx.x], inputChannel[threadPixelIndex] * filter[filterIndex]);
 	__syncthreads();
 	
-	if (threadIdx.x == 0 && threadIdx.y == 0)
+	// let the first thread in each thread matrix write the result to the global output buffer
+	if (threadIdx.y == 0 && threadIdx.z == 0)
 	{
-		outputChannel[sourcePixelIndex] = result;
+        outputChannel[centerPixelIndex] = sharedBuffer[threadIdx.x];
 	}
 }
 
@@ -115,26 +134,48 @@ void your_gaussian_blur(const uchar4* const h_inputRGBA,
                         unsigned char *d_blueBlur,
                         const int filterWidth)
 {
-	// görüntü boyutu 32x32 nin tam katı olmadığı için gereğinden fazla thread oluşturmak gerekiyor
-	const dim3 threads(BLOCK_COLS, BLOCK_ROWS);
-	const dim3 blocks(1 + (numCols / threads.x), 1 + (numRows / threads.y));
-	printf("Threads: %dx%d Blocks: %dx%d\n", threads.x, threads.y, blocks.x, blocks.y);
+    // set the thread and block sizes for kernels that seperate and recombine the channels
+	const dim3 channelThreads(BLOCK_COLS, BLOCK_ROWS);
+	const dim3 channelBlocks(1 + (numCols / channelThreads.x), 1 + (numRows / channelThreads.y));
+	
+	// set the thread and block sizes for the blurring kernel
+    int threadsPerBlurBlock = MAX_THREADS_PER_BLOCK / (filterWidth * filterWidth);
+	const dim3 blurThreads(threadsPerBlurBlock, filterWidth, filterWidth);
+	const dim3 blurBlocks((numCols / threadsPerBlurBlock) + 1, numRows);
 
-	separateChannels<<<blocks, threads>>>(d_inputRGBA, numRows, numCols, d_red, d_green, d_blue);
+    // print useful information
+    printf("Image size: %dx%d\n", numCols, numRows);
+    printf("Threads for channel kernels: %dx%d\nBlocks for channel kernels: %dx%d\n",
+            channelThreads.x, channelThreads.y, channelBlocks.x, channelBlocks.y);
+    printf("Threads for blurring a channel: %dx%dx%d\nBlocks for blurring a channel: %dx%d\n",
+	        blurThreads.x, blurThreads.y, blurThreads.z, blurBlocks.x, blurBlocks.y);
+
+    // separate the color channels
+	separateChannels<<<channelBlocks, channelThreads>>>
+	                (d_inputRGBA, numRows, numCols, d_red, d_green, d_blue);
 	cudaDeviceSynchronize(); 
 	checkCudaErrors(cudaGetLastError());
+   	
+    // blur the red channel	
+	gaussianBlur<<<blurBlocks, blurThreads, threadsPerBlurBlock>>>
+	            (d_red, d_redBlur, numRows, numCols, threadsPerBlurBlock, d_filter, filterWidth);
+    cudaDeviceSynchronize(); 
+	checkCudaErrors(cudaGetLastError());
 
-	const dim3 blockSize(filterWidth, filterWidth);
-	const dim3 gridSize(numCols, numRows);
-	printf("Block size: %dx%d Grid Size: %dx%d\n", blockSize.x, blockSize.y, gridSize.x, gridSize.y);
-	
-	gaussianBlur<<<gridSize, blockSize>>>(d_red, d_redBlur, numRows, numCols, d_filter, filterWidth);
-	gaussianBlur<<<gridSize, blockSize>>>(d_green, d_greenBlur, numRows, numCols, d_filter, filterWidth);
-	gaussianBlur<<<gridSize, blockSize>>>(d_blue, d_blueBlur, numRows, numCols, d_filter, filterWidth);
+    // blur the green channel
+	gaussianBlur<<<blurBlocks, blurThreads, threadsPerBlurBlock>>>
+                (d_green, d_greenBlur, numRows, numCols, threadsPerBlurBlock, d_filter, filterWidth);
+    cudaDeviceSynchronize(); 
+	checkCudaErrors(cudaGetLastError());
+
+    // blur the blue channel
+	gaussianBlur<<<blurBlocks, blurThreads, threadsPerBlurBlock>>>
+	            (d_blue, d_blueBlur, numRows, numCols, threadsPerBlurBlock, d_filter, filterWidth);
 	cudaDeviceSynchronize(); 
 	checkCudaErrors(cudaGetLastError());
 	
-	recombineChannels<<<blocks, threads>>>
+	// recombine the blurred channels
+	recombineChannels<<<channelBlocks, channelThreads>>>
                      (d_redBlur, d_greenBlur, d_blueBlur, d_outputRGBA, numRows, numCols);
 	cudaDeviceSynchronize(); 
 	checkCudaErrors(cudaGetLastError());
