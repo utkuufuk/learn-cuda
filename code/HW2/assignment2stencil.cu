@@ -9,15 +9,15 @@ unsigned char *d_red, *d_green, *d_blue;
 float         *d_filter;
 
 __global__
-void gaussian_blur(const unsigned char* const inputChannel,
-                   unsigned char* const outputChannel,
-                   int numRows, 
-                   int numCols,
-                   const float* const filter, 
-                   const int filterWidth)
+void gaussianBlur(const unsigned char* const inputChannel,
+                  unsigned char* const outputChannel,
+                  int numRows, 
+                  int numCols,
+                  const float* const filter, 
+                  const int filterWidth)
 {		
-	__shared__ int result;
-
+    __shared__ float result;
+    
 	if (threadIdx.x == 0 && threadIdx.y == 0)
 	{
 		result = 0;
@@ -33,7 +33,7 @@ void gaussian_blur(const unsigned char* const inputChannel,
 	int threadPixelIndex = threadPixelRows * numCols + threadPixelCols;
 	int filterIndex = threadIdx.y * filterWidth + threadIdx.x;
 	
-	atomicAdd(&result, (int) (inputChannel[threadPixelIndex] * filter[filterIndex]));
+	atomicAdd(&result, inputChannel[threadPixelIndex] * filter[filterIndex]);
 	__syncthreads();
 	
 	if (threadIdx.x == 0 && threadIdx.y == 0)
@@ -57,7 +57,7 @@ void separateChannels(const uchar4* const inputImageRGBA,
 
     // avoid accessing the memory outside the image by having any threads mapped there return early
 	if (threadIndex2D.x >= numCols || threadIndex2D.y >= numRows)
-    {
+    { 
 		return;
 	}
 	uchar4 rgba = inputImageRGBA[index];				
@@ -105,23 +105,22 @@ void allocateMemoryAndCopyToGPU(const size_t numRowsImage, const size_t numColsI
 	checkCudaErrors(cudaMemcpy(d_filter, h_filter, filterMemSize, cudaMemcpyHostToDevice));
 }
 
-void your_gaussian_blur(const uchar4 * const h_inputImageRGBA, 
-                        uchar4 * const d_inputImageRGBA,
-                        uchar4* const d_outputImageRGBA, 
+void your_gaussian_blur(const uchar4* const h_inputRGBA, 
+                        uchar4* const d_inputRGBA,
+                        uchar4* const d_outputRGBA, 
                         const size_t numRows, 
                         const size_t numCols,
-                        unsigned char *d_redBlurred, 
-                        unsigned char *d_greenBlurred, 
-                        unsigned char *d_blueBlurred,
+                        unsigned char *d_redBlur, 
+                        unsigned char *d_greenBlur, 
+                        unsigned char *d_blueBlur,
                         const int filterWidth)
 {
 	// görüntü boyutu 32x32 nin tam katı olmadığı için gereğinden fazla thread oluşturmak gerekiyor
-	const dim3 threadsPerBlock(BLOCK_COLS, BLOCK_ROWS);
-	const dim3 numBlocks(1 + (numCols / threadsPerBlock.x), 1 + (numRows / threadsPerBlock.y));
-	printf("Block size: %dx%d Grid Size: %dx%d\n", threadsPerBlock.x, threadsPerBlock.y,
-	                                               numBlocks.x, numBlocks.y);
+	const dim3 threads(BLOCK_COLS, BLOCK_ROWS);
+	const dim3 blocks(1 + (numCols / threads.x), 1 + (numRows / threads.y));
+	printf("Threads: %dx%d Blocks: %dx%d\n", threads.x, threads.y, blocks.x, blocks.y);
 
-	separateChannels<<<numBlocks, threadsPerBlock>>>(d_inputImageRGBA, numRows, numCols, d_red, d_green, d_blue);
+	separateChannels<<<blocks, threads>>>(d_inputRGBA, numRows, numCols, d_red, d_green, d_blue);
 	cudaDeviceSynchronize(); 
 	checkCudaErrors(cudaGetLastError());
 
@@ -129,13 +128,14 @@ void your_gaussian_blur(const uchar4 * const h_inputImageRGBA,
 	const dim3 gridSize(numCols, numRows);
 	printf("Block size: %dx%d Grid Size: %dx%d\n", blockSize.x, blockSize.y, gridSize.x, gridSize.y);
 	
-	gaussian_blur<<<gridSize, blockSize>>>(d_red, d_redBlurred, numRows, numCols, d_filter, filterWidth);
-	gaussian_blur<<<gridSize, blockSize>>>(d_green, d_greenBlurred, numRows, numCols, d_filter, filterWidth);
-	gaussian_blur<<<gridSize, blockSize>>>(d_blue, d_blueBlurred, numRows, numCols, d_filter, filterWidth);
+	gaussianBlur<<<gridSize, blockSize>>>(d_red, d_redBlur, numRows, numCols, d_filter, filterWidth);
+	gaussianBlur<<<gridSize, blockSize>>>(d_green, d_greenBlur, numRows, numCols, d_filter, filterWidth);
+	gaussianBlur<<<gridSize, blockSize>>>(d_blue, d_blueBlur, numRows, numCols, d_filter, filterWidth);
 	cudaDeviceSynchronize(); 
 	checkCudaErrors(cudaGetLastError());
 	
-	recombineChannels<<<numBlocks, threadsPerBlock>>>(d_redBlurred, d_greenBlurred, d_blueBlurred, d_outputImageRGBA, numRows, numCols);
+	recombineChannels<<<blocks, threads>>>
+                     (d_redBlur, d_greenBlur, d_blueBlur, d_outputRGBA, numRows, numCols);
 	cudaDeviceSynchronize(); 
 	checkCudaErrors(cudaGetLastError());
 }

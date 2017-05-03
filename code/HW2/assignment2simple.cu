@@ -24,7 +24,6 @@ void gaussianBlur(const unsigned char* const inputChannel,
     {
         return;
     }
-
     float color = 0.0f;
     
     for (int filterRowIndex = 0; filterRowIndex < filterWidth; filterRowIndex++) 
@@ -104,7 +103,7 @@ void allocateMemoryAndCopyToGPU(const size_t numRowsImage, const size_t numColsI
     checkCudaErrors(cudaMemcpy(d_filter, h_filter, filterMemSize, cudaMemcpyHostToDevice));
 }
 
-void your_gaussianBlur(const uchar4* const h_inputRGBA, 
+void your_gaussian_blur(const uchar4* const h_inputRGBA, 
 	            		uchar4* const d_inputRGBA,
                         uchar4* const d_outputRGBA, 
                			const size_t numRows, 
