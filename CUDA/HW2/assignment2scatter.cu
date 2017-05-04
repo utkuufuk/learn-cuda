@@ -18,7 +18,7 @@ void gaussianBlur(const unsigned char* const inputChannel,
                   int numThreadMatrices,
                   const float* const filter, 
                   const int filterWidth)
-{		
+{       
     // calculate the center pixel location of the thread 
     int centerColIndex = blockIdx.x * numThreadMatrices + threadIdx.x;
     int centerRowIndex = blockIdx.y;
@@ -46,17 +46,17 @@ void gaussianBlur(const unsigned char* const inputChannel,
 
 __global__
 void copy(unsigned char* const outputChannel, float* const inputChannel, int numRows, int numCols)
-{	
-	const int2 threadIndex2D = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
-		                                 blockIdx.y * blockDim.y + threadIdx.y);
-	const int index = threadIndex2D.y * numCols + threadIndex2D.x;
+{   
+    const int2 threadIndex2D = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
+                                         blockIdx.y * blockDim.y + threadIdx.y);
+    const int index = threadIndex2D.y * numCols + threadIndex2D.x;
 
     // avoid accessing the memory outside the image by having any threads mapped there return early
-	if (threadIndex2D.x >= numCols || threadIndex2D.y >= numRows)
+    if (threadIndex2D.x >= numCols || threadIndex2D.y >= numRows)
     {
-		return;
-	}
-	outputChannel[index] = inputChannel[index];
+        return;
+    }
+    outputChannel[index] = inputChannel[index];
 }
 
     __global__
@@ -66,20 +66,20 @@ void separateChannels(const uchar4* const inputImageRGBA,
                       unsigned char* const redChannel,
                       unsigned char* const greenChannel,
                       unsigned char* const blueChannel)
-{	
-	const int2 threadIndex2D = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
+{   
+    const int2 threadIndex2D = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
                                          blockIdx.y * blockDim.y + threadIdx.y);
-	const int index = threadIndex2D.y * numCols + threadIndex2D.x;
+    const int index = threadIndex2D.y * numCols + threadIndex2D.x;
 
     // avoid accessing the memory outside the image by having any threads mapped there return early
-	if (threadIndex2D.x >= numCols || threadIndex2D.y >= numRows)
+    if (threadIndex2D.x >= numCols || threadIndex2D.y >= numRows)
     {
-		return;
-	}
-	uchar4 rgba = inputImageRGBA[index];				
-	redChannel[index] = rgba.x;
-	greenChannel[index] = rgba.y;
-	blueChannel[index] = rgba.z;
+        return;
+    }
+    uchar4 rgba = inputImageRGBA[index];                
+    redChannel[index] = rgba.x;
+    greenChannel[index] = rgba.y;
+    blueChannel[index] = rgba.z;
 }
 
     __global__
@@ -90,49 +90,49 @@ void recombineChannels(const unsigned char* const redChannel,
                        int numRows,
                        int numCols)
 {
-	const int2 thread_2D_pos = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
-			                             blockIdx.y * blockDim.y + threadIdx.y);
-	const int thread_1D_pos = thread_2D_pos.y * numCols + thread_2D_pos.x;
+    const int2 thread_2D_pos = make_int2(blockIdx.x * blockDim.x + threadIdx.x,
+                                         blockIdx.y * blockDim.y + threadIdx.y);
+    const int thread_1D_pos = thread_2D_pos.y * numCols + thread_2D_pos.x;
 
     // avoid accessing the memory outside the image by having any threads mapped there return early
-	if (thread_2D_pos.x >= numCols || thread_2D_pos.y >= numRows)
-	{
-		return;
-	}
-	unsigned char red   = redChannel[thread_1D_pos];
-	unsigned char green = greenChannel[thread_1D_pos];
-	unsigned char blue  = blueChannel[thread_1D_pos];
+    if (thread_2D_pos.x >= numCols || thread_2D_pos.y >= numRows)
+    {
+        return;
+    }
+    unsigned char red   = redChannel[thread_1D_pos];
+    unsigned char green = greenChannel[thread_1D_pos];
+    unsigned char blue  = blueChannel[thread_1D_pos];
 
-	//Alpha should be 255 for no transparency
-	uchar4 outputPixel = make_uchar4(red, green, blue, 255);
-	outputImageRGBA[thread_1D_pos] = outputPixel;
+    //Alpha should be 255 for no transparency
+    uchar4 outputPixel = make_uchar4(red, green, blue, 255);
+    outputImageRGBA[thread_1D_pos] = outputPixel;
 }
 
 void allocateMemoryAndCopyToGPU(const size_t numRowsImage, const size_t numColsImage,
                                 const float* const h_filter, const size_t filterWidth)
 {
-	checkCudaErrors(cudaMalloc(&d_red,   sizeof(unsigned char) * numRowsImage * numColsImage));
-	checkCudaErrors(cudaMalloc(&d_green, sizeof(unsigned char) * numRowsImage * numColsImage));
-	checkCudaErrors(cudaMalloc(&d_blue,  sizeof(unsigned char) * numRowsImage * numColsImage));
+    checkCudaErrors(cudaMalloc(&d_red,   sizeof(unsigned char) * numRowsImage * numColsImage));
+    checkCudaErrors(cudaMalloc(&d_green, sizeof(unsigned char) * numRowsImage * numColsImage));
+    checkCudaErrors(cudaMalloc(&d_blue,  sizeof(unsigned char) * numRowsImage * numColsImage));
 
-	checkCudaErrors(cudaMalloc(&d_redTemp, sizeof(int) * numRowsImage * numColsImage));
-	checkCudaErrors(cudaMalloc(&d_greenTemp, sizeof(int) * numRowsImage * numColsImage));
-	checkCudaErrors(cudaMalloc(&d_blueTemp, sizeof(int) * numRowsImage * numColsImage));
+    checkCudaErrors(cudaMalloc(&d_redTemp, sizeof(int) * numRowsImage * numColsImage));
+    checkCudaErrors(cudaMalloc(&d_greenTemp, sizeof(int) * numRowsImage * numColsImage));
+    checkCudaErrors(cudaMalloc(&d_blueTemp, sizeof(int) * numRowsImage * numColsImage));
 
-	checkCudaErrors(cudaMemset(d_redTemp, 0, sizeof(int) * numRowsImage * numColsImage));
-	checkCudaErrors(cudaMemset(d_greenTemp, 0, sizeof(int) * numRowsImage * numColsImage));
-	checkCudaErrors(cudaMemset(d_blueTemp, 0, sizeof(int) * numRowsImage * numColsImage));
+    checkCudaErrors(cudaMemset(d_redTemp, 0, sizeof(int) * numRowsImage * numColsImage));
+    checkCudaErrors(cudaMemset(d_greenTemp, 0, sizeof(int) * numRowsImage * numColsImage));
+    checkCudaErrors(cudaMemset(d_blueTemp, 0, sizeof(int) * numRowsImage * numColsImage));
 
     size_t filterMemSize = filterWidth * filterWidth * sizeof(float);
-	checkCudaErrors(cudaMalloc(&d_filter, filterMemSize));
-	checkCudaErrors(cudaMemcpy(d_filter, h_filter, filterMemSize, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMalloc(&d_filter, filterMemSize));
+    checkCudaErrors(cudaMemcpy(d_filter, h_filter, filterMemSize, cudaMemcpyHostToDevice));
 }
 
 void your_gaussian_blur(const uchar4 * const h_inputRGBA, 
-		                uchar4 * const d_inputRGBA,
+                        uchar4 * const d_inputRGBA,
                         uchar4* const d_outputRGBA, 
-		                const size_t numRows, 
-		                const size_t numCols,
+                        const size_t numRows, 
+                        const size_t numCols,
                         unsigned char *d_redBlurred, 
                         unsigned char *d_greenBlurred, 
                         unsigned char *d_blueBlurred,
@@ -179,16 +179,16 @@ void your_gaussian_blur(const uchar4 * const h_inputRGBA,
     checkCudaErrors(cudaGetLastError());
 
     copy<<<channelBlocks, channelThreads>>>(d_redBlurred, d_redTemp, numRows, numCols);
-	cudaDeviceSynchronize(); 
-	checkCudaErrors(cudaGetLastError());
+    cudaDeviceSynchronize(); 
+    checkCudaErrors(cudaGetLastError());
 
-	copy<<<channelBlocks, channelThreads>>>(d_greenBlurred, d_greenTemp, numRows, numCols);
-	cudaDeviceSynchronize(); 
-	checkCudaErrors(cudaGetLastError());
+    copy<<<channelBlocks, channelThreads>>>(d_greenBlurred, d_greenTemp, numRows, numCols);
+    cudaDeviceSynchronize(); 
+    checkCudaErrors(cudaGetLastError());
 
-	copy<<<channelBlocks, channelThreads>>>(d_blueBlurred, d_blueTemp, numRows, numCols);
-	cudaDeviceSynchronize(); 
-	checkCudaErrors(cudaGetLastError());
+    copy<<<channelBlocks, channelThreads>>>(d_blueBlurred, d_blueTemp, numRows, numCols);
+    cudaDeviceSynchronize(); 
+    checkCudaErrors(cudaGetLastError());
 
     // recombine the blurred channels
     recombineChannels<<<channelBlocks, channelThreads>>>
@@ -199,11 +199,11 @@ void your_gaussian_blur(const uchar4 * const h_inputRGBA,
 
 void cleanup() 
 {
-	checkCudaErrors(cudaFree(d_red));
-	checkCudaErrors(cudaFree(d_green));
-	checkCudaErrors(cudaFree(d_blue));
-	checkCudaErrors(cudaFree(d_redTemp));
-	checkCudaErrors(cudaFree(d_greenTemp));
-	checkCudaErrors(cudaFree(d_blueTemp));
-	checkCudaErrors(cudaFree(d_filter));
+    checkCudaErrors(cudaFree(d_red));
+    checkCudaErrors(cudaFree(d_green));
+    checkCudaErrors(cudaFree(d_blue));
+    checkCudaErrors(cudaFree(d_redTemp));
+    checkCudaErrors(cudaFree(d_greenTemp));
+    checkCudaErrors(cudaFree(d_blueTemp));
+    checkCudaErrors(cudaFree(d_filter));
 }
