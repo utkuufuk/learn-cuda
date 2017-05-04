@@ -19,6 +19,10 @@ void gaussianBlur(const unsigned char* const inputChannel,
                   const float* const filter, 
                   const int filterWidth)
 {       
+    // each 9x9 thread matrix in a thread block will write
+    // its output into the corresponding location in this buffer
+    extern __shared__ float sharedBuffer[];
+
     // calculate the center pixel location of the thread 
     int centerColIndex = blockIdx.x * numThreadMatrices + threadIdx.x;
     int centerRowIndex = blockIdx.y;
@@ -160,32 +164,29 @@ void your_gaussian_blur(const uchar4 * const h_inputRGBA,
     cudaDeviceSynchronize(); 
     checkCudaErrors(cudaGetLastError());
 
+    int sharedMemorySize = threadsPerBlurBlock + filterWidth - 1;
+    
     // blur the red channel 
-    gaussianBlur<<<blurBlocks, blurThreads, threadsPerBlurBlock>>>
+    gaussianBlur<<<blurBlocks, blurThreads>>>
                 (d_red, d_redTemp, numRows, numCols, threadsPerBlurBlock, d_filter, filterWidth);
     cudaDeviceSynchronize(); 
     checkCudaErrors(cudaGetLastError());
 
     // blur the green channel
-    gaussianBlur<<<blurBlocks, blurThreads, threadsPerBlurBlock>>>
+    gaussianBlur<<<blurBlocks, blurThreads>>>
                 (d_green, d_greenTemp, numRows, numCols, threadsPerBlurBlock, d_filter, filterWidth);
     cudaDeviceSynchronize(); 
     checkCudaErrors(cudaGetLastError());
 
     // blur the blue channel
-    gaussianBlur<<<blurBlocks, blurThreads, threadsPerBlurBlock>>>
+    gaussianBlur<<<blurBlocks, blurThreads>>>
                 (d_blue, d_blueTemp, numRows, numCols, threadsPerBlurBlock, d_filter, filterWidth);
     cudaDeviceSynchronize(); 
     checkCudaErrors(cudaGetLastError());
 
+    // copy the temporary buffers to the output channels
     copy<<<channelBlocks, channelThreads>>>(d_redBlurred, d_redTemp, numRows, numCols);
-    cudaDeviceSynchronize(); 
-    checkCudaErrors(cudaGetLastError());
-
     copy<<<channelBlocks, channelThreads>>>(d_greenBlurred, d_greenTemp, numRows, numCols);
-    cudaDeviceSynchronize(); 
-    checkCudaErrors(cudaGetLastError());
-
     copy<<<channelBlocks, channelThreads>>>(d_blueBlurred, d_blueTemp, numRows, numCols);
     cudaDeviceSynchronize(); 
     checkCudaErrors(cudaGetLastError());
