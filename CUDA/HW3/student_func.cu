@@ -12,11 +12,11 @@ const int MAX = 1;
 
 __global__
 void histogram(unsigned int* d_bins, 
-                     const float* d_outBuffer, 
-                     const int binCount, 
-                     const float lumMin, 
-                     const float lumMax, 
-                     const int bufferSize) 
+               const float* d_outBuffer, 
+               const int binCount, 
+               const float lumMin, 
+               const float lumMax, 
+               const int bufferSize) 
 {  
     int bufferIndex = threadIdx.x + blockDim.x * blockIdx.x;
     
@@ -60,10 +60,7 @@ void scan(unsigned int* d_bins, int bufferSize)
 }
 
 __global__
-void reduce(const float* const d_inBuffer, 
-                        float* d_outBuffer, 
-                        const size_t bufferSize, 
-                        int minOrMax) 
+void reduce(const float* const d_inBuffer, float* d_outBuffer, const size_t bufferSize, int minOrMax) 
 {
     extern __shared__ float sharedBuf[];
     
