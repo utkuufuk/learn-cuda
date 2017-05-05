@@ -187,13 +187,7 @@ In-block synchronization is achieved by using barriers in a block.**
 **Note: Exclusive segmented scan can be replaced with segmented reduce which is more efficient.**
 
 ### Sort
-#### Brick Sort:
 ![Brick Sort](Images/brick-sort.png)
-**Step complexity: O(n)**<br>
-**Work complexity: O(n^2)**
 
-#### Merge Sort:
-![Parallel Merge](Images/parallel-merge.png)
-**Every thread will do a binary search on the other input list in order to find its overall index.**
+![Radix Sort](Images/radix-sort.png)
 
-![Merge Sort](Images/merge-sort.png)
