@@ -162,3 +162,38 @@ In-block synchronization is achieved by using barriers in a block.**
 
 ### Histogram Algorithm
 ![Histogram](Images/histogram-algorithm.png)
+
+## Lesson 4 - Fundamental GPU Algorithms cont'd
+
+### Compact
+![Compact](Images/compact-primitive.png)
+
+![Compact Algorithm](Images/compact-algorithm.png)
+
+![Compact Steps](Images/compact-steps.png)
+
+#### Multiple Outputs Per Input Element:
+![Dynamic Compact](Images/dynamic-compact.png)
+
+### Sparse Matrix Multiplication
+#### Segmented Scan:
+![Segmented Scan](Images/segmented-scan.png)
+
+#### Sparse Matrices:
+![Sparse Matrices](Images/sparse-matrices.png)
+
+#### Multiplication:
+![Sparse Matrix Multiplication](Images/sparse-matrix-multiplication.png)
+**Note: Exclusive segmented scan can be replaced with segmented reduce which is more efficient.**
+
+### Sort
+#### Brick Sort:
+![Brick Sort](Images/brick-sort.png)
+**Step complexity: O(n)**<br>
+**Work complexity: O(n^2)**
+
+#### Merge Sort:
+![Parallel Merge](Images/parallel-merge.png)
+**Every thread will do a binary search on the other input list in order to find its overall index.**
+
+![Merge Sort](Images/merge-sort.png)
