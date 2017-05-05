@@ -47,13 +47,13 @@ void scan(unsigned int* d_bins, int bufferSize)
 
         if (spot >= 0)
         {
-          val = d_bins[spot];
+            val = d_bins[spot];
         }
         __syncthreads();
 
         if (spot >= 0)
         {
-          d_bins[bufferIndex] += val;
+            d_bins[bufferIndex] += val;
         }
         __syncthreads();
     }
