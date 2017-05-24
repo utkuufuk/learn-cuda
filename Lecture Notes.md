@@ -191,3 +191,18 @@ In-block synchronization is achieved by using barriers in a block.**
 
 ![Radix Sort](Images/radix-sort.png)
 
+## Lesson 5 - Optimizing GPU Programs
+
+![APOD](Images/optimization-apod.png)
+
+![Scaling](Images/scaling.png)
+
+### Memory Bandwidth
+![CUDA Device Query](Images/device-query.png)
+
+![Theoretical Peak Bandwidth](Images/peak-bandwidth.png)
+
+#### NVVP Tool
+![NVVP Profiler Tool](Images/nvvp-profiler.png)
+
+![NVVP Screen](Images/nvvp-screen.png)
