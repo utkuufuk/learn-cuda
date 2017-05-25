@@ -206,3 +206,6 @@ In-block synchronization is achieved by using barriers in a block.**
 ![NVVP Profiler Tool](Images/nvvp-profiler.png)
 
 ![NVVP Screen](Images/nvvp-screen.png)
+
+### Math Optimizations
+![Math Optimizations](Images/math-optimizations.png)
