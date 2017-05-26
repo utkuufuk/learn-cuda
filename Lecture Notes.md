@@ -209,3 +209,22 @@ In-block synchronization is achieved by using barriers in a block.**
 
 ### Math Optimizations
 ![Math Optimizations](Images/math-optimizations.png)
+
+### Host-GPU Interactions
+
+#### Pinned Host Memory
+![Pinned Host Memory](Images/cuda-memcpy-async.png)
+
+#### Streams
+![Advantages of Streams](Images/stream-advantages.png)
+
+![Streams](Images/streams.png)
+
+![Using Streams 1](Images/stream-usage.png)
+![Using Streams 2](Images/stream-usage-2.png)
+
+**Without Streams:**
+![Without Streams](Images/without-streams.png)
+
+**With Streams:**
+![With Streams](Images/with-streams.png)
