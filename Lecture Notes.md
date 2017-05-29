@@ -228,3 +228,29 @@ In-block synchronization is achieved by using barriers in a block.**
 
 **With Streams:**
 ![With Streams](Images/with-streams.png)
+
+## Lesson 7 - Dynamic Parallelism
+
+![Composability](Images/composability.png)
+![Dynamic Parallelism](Images/dynamic-parallelism.png)
+![Things to Watch Out For-1](Images/things-to-watch-out-for.png)
+![Things to Watch Out For-2](Images/things-to-watch-out-for-2.png)
+
+#### Quicksort Example:
+![Quicksort Example](Images/quicksort-example.png)
+  
+## Extras
+#### Libraries
+  * cuBLAS - Basic Linear Algebra Subroutines
+  * cuRand - Psuedo and Quasi Random Generation Routines
+  * NPP - Low-Level Image Processing Routines
+  * ArrayFire - Framework for Data-Parallel Array Manipulation
+  
+#### Power Tools
+  * Thrust
+  * CUB
+  * CUDA DMA
+
+#### MATLAB
+
+
