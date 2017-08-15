@@ -1,0 +1,69 @@
+[1mdiff --git a/programming-guide/guide.md b/programming-guide/guide.md[m
+[1mindex 3ed20fb..440ea1c 100644[m
+[1m--- a/programming-guide/guide.md[m
+[1m+++ b/programming-guide/guide.md[m
+[36m@@ -244,14 +244,64 @@[m [m__global__ void MatMulKernel(Matrix A, Matrix B, Matrix C)[m
+ [m
+     // Write Csub to device memory. Each thread writes one element.[m
+     SetElement(Csub, row, col, Cvalue);[m
+[32m+[m[32m}[m
+ ```[m
+ ![With Shared Memory](images/with-shared-memory.png)[m
+ [m
+[32m+[m[32m### Page-Locked Host Memory[m
+[32m+[m[32mThe runtime provides functions to allow the use of page-locked (pinned) host memory (as opposed to regular pageable host memory allocated by `malloc()`):[m
+[32m+[m[32m* `cudaHostAlloc()` and `cudaFreeHost()` allocate and free page-locked host[m
+[32m+[m[32mmemory[m
+[32m+[m
+[32m+[m[32m* `cudaHostRegister()` page-locks a range of memory allocated by `malloc()` (see reference manual for limitations)[m[41m [m
+[32m+[m
+[32m+[m[32mUsing page-locked host memory has several benefits:[m
+[32m+[m[32m* Copies between page-locked host memory and device memory can be performed concurrently with kernel execution for some devices[m[41m [m
+[32m+[m
+[32m+[m[32m* On some devices, page-locked host memory can be mapped into the address space of the device, eliminating the need to copy it to or from device memory[m
+[32m+[m
+[32m+[m[32m* On systems with a front-side bus, bandwidth between host memory and device memory is higher if host memory is allocated as page-locked and even higher if in addition it is allocated as *write-combining*[m
+[32m+[m
+[32m+[m[32mPage-locked host memory is a scarce resource however, so allocations in page-locked memory will start failing long before allocations in pageable memory. In addition, by reducing the amount of physical memory available to the operating system for paging, consuming too much page-locked memory reduces overall system performance.[m
+[32m+[m
+[32m+[m
+[32m+[m
+[32m+[m
+[32m+[m
+[32m+[m
+[32m+[m
+[32m+[m
+[32m+[m
+[32m+[m
+[32m+[m
+[32m+[m
+[32m+[m
+[32m+[m
+[32m+[m
+[32m+[m
+[32m+[m
+[32m+[m
+ [m
+ [m
+ [m
+ [m
+ [m
+[32m+[m[32m<br>[m
+[32m+[m[32m<br>[m
+[32m+[m[32m<br>[m
+[32m+[m[32m<br>[m
+[32m+[m[32m<br>[m
+[32m+[m[32m<br>[m
+[32m+[m[32m<br>[m
+[32m+[m[32m<br>[m
+[32m+[m[32m<br>[m
+[32m+[m[32m<br>[m
+[32m+[m[32m<br>[m
+[32m+[m[32m<br>[m
+[32m+[m[32m<br>[m
+[32m+[m[32m<br>[m
+[32m+[m[32m<br>[m
+[32m+[m[32m<br>[m
+ [m
+ [m
+ [m

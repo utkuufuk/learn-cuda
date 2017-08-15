@@ -244,14 +244,64 @@ __global__ void MatMulKernel(Matrix A, Matrix B, Matrix C)
 
     // Write Csub to device memory. Each thread writes one element.
     SetElement(Csub, row, col, Cvalue);
+}
 ```
 ![With Shared Memory](images/with-shared-memory.png)
 
+### Page-Locked Host Memory
+The runtime provides functions to allow the use of page-locked (pinned) host memory (as opposed to regular pageable host memory allocated by `malloc()`):
+* `cudaHostAlloc()` and `cudaFreeHost()` allocate and free page-locked host
+memory
+
+* `cudaHostRegister()` page-locks a range of memory allocated by `malloc()` (see reference manual for limitations) 
+
+Using page-locked host memory has several benefits:
+* Copies between page-locked host memory and device memory can be performed concurrently with kernel execution for some devices 
+
+* On some devices, page-locked host memory can be mapped into the address space of the device, eliminating the need to copy it to or from device memory
+
+* On systems with a front-side bus, bandwidth between host memory and device memory is higher if host memory is allocated as page-locked and even higher if in addition it is allocated as *write-combining*
+
+Page-locked host memory is a scarce resource however, so allocations in page-locked memory will start failing long before allocations in pageable memory. In addition, by reducing the amount of physical memory available to the operating system for paging, consuming too much page-locked memory reduces overall system performance.
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
 
 
 
