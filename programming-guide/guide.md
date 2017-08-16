@@ -1,41 +1,40 @@
-# CUDA PROGRAMMING GUIDE
-## 1. INTRODUCTION
-### Streaming Multiprocessors
+# 1. INTRODUCTION
+## Streaming Multiprocessors
 A GPU is built around an array of Streaming Multiprocessors (SMs). A multithreaded program is partitioned into blocks of threads that execute independently from each other, so that a GPU with more multiprocessors will automatically execute the program in less time than a GPU with fewer multiprocessors.
 
 ![Streaming Multiprocessors](images/streaming-multiprocessors.png)
 
-## 2. PROGRAMMING MODEL
-### Thread Hierarchy
+# 2. PROGRAMMING MODEL
+## Thread Hierarchy
 One can specify synchronization points in the kernel by calling the `__syncthreads()` intrinsic function; `__syncthreads()` acts as a barrier at which all threads in the block must wait before any is allowed to proceed.
 
-### Memory Hierarchy
+## Memory Hierarchy
 CUDA threads may access data from multiple memory spaces during their execution as illustrated below. Each thread has private local memory. Each thread block has shared memory visible to all threads of the block and with the same lifetime as the block. All threads have access to the same global memory.
 
 ![Memory Hierarchy](images/memory-hierarchy.png)
 
-### Compute Capability
+## Compute Capability
 ![Compute Capability](images/compute-capability.png)
 
-#### Feature Support
+### Feature Support
 ![Feature Support](images/feature-support.png)
 
-#### Technical Specifications
+### Technical Specifications
 ![Technical Specifications 1](images/technical-specs-1.png)
 ![Technical Specifications 2](images/technical-specs-2.png)
 ![Technical Specifications 3](images/technical-specs-3.png)
 ![Technical Specifications 4](images/technical-specs-4.png)
 
-## 3. PROGRAMMING INTERFACE
-### Device Memory
+# 3. PROGRAMMING INTERFACE
+## Device Memory
 Device memory can be allocated either as *linear memory* or as *CUDA arrays*. (CUDA arrays are opaque memory layouts optimized for texture fetching.)
 
 Linear memory is typically allocated using `cudaMalloc()` and freed using `cudaFree()` and data transfer between host memory and device memory are typically done using `cudaMemcpy()`.
 
 Linear memory can also be allocated through `cudaMallocPitch()` and `cudaMalloc3D()`. These functions are recommended for allocations of 2D or 3D arrays as it makes sure that the allocation is appropriately padded to meet the alignment requirements, therefore ensuring best performance when accessing the row addresses or performing copies between 2D arrays and other regions of device memory (using the `cudaMemcpy2D()` and `cudaMemcpy3D()` functions).
 
-### Shared Memory
-#### Matrix Multiplication Without Shared Memory
+## Shared Memory
+### Matrix Multiplication Without Shared Memory
 ``` c
 // Matrices are stored in row-major order:
 // M(row, col) = *(M.elements + row * M.width + col)
@@ -109,7 +108,7 @@ __global__ void MatMulKernel(Matrix A, Matrix B, Matrix C)
 ```
 ![Without Shared Memory](images/without-shared-memory.png)
 
-#### Matrix Multiplication With Shared Memory
+### Matrix Multiplication With Shared Memory
 ``` c
 // Matrices are stored in row-major order:
 // M(row, col) = *(M.elements + row * M.stride + col)
@@ -248,8 +247,8 @@ __global__ void MatMulKernel(Matrix A, Matrix B, Matrix C)
 ```
 ![With Shared Memory](images/with-shared-memory.png)
 
-### Page-Locked Host Memory
-The runtime provides functions to allow the use of page-locked (pinned) host memory (as opposed to regular pageable host memory allocated by `malloc()`):
+## Page-Locked Host Memory
+The runtime provides functions to allow the use of page-locked (pinned) host memory — as opposed to regular pageable host memory allocated by `malloc()`:
 * `cudaHostAlloc()` and `cudaFreeHost()` allocate and free page-locked host
 memory
 
@@ -264,6 +263,105 @@ Using page-locked host memory has several benefits:
 
 Page-locked host memory is a scarce resource however, so allocations in page-locked memory will start failing long before allocations in pageable memory. In addition, by reducing the amount of physical memory available to the operating system for paging, consuming too much page-locked memory reduces overall system performance.
 
+### Write-Combining Memory
+By default page-locked host memory is allocated as cacheable. It can optionally be allocated as *write-combining* instead by passing flag `cudaHostAllocWriteCombined` to `cudaHostAlloc()`. 
+
+Write-combining memory frees up the host's L1 and L2 cache resources, making more cache available to the rest of the application. In addition, write-combining memory is not snooped during transfers across the PCI Express bus, which can improve transfer performance by up to 40%.
+
+Reading from write-combining memory from the host is prohibitively slow, so write-combining memory should in general be used for memory that the host only write  to.
+
+### Mapped Memory
+A block of page-locked host memory can also be mapped into the address space of the device by passing flag `cudaHostAllocMapped` to `cudaHostAlloc()` or by passing flag `cudaHostRegisterMapped` to `cudaHostRegister()`. Such a block has therefore in general two addresses: one in host memory that is returned by `cudaHostAlloc()` or `malloc()`, and one in device memory that can be retrieved using `cudaHostGetDevicePointer()` and then used to access the block from within a kernel. The only exception is for pointers allocated with `cudaHostAlloc()` and when a unified address space is used for the host and the device.
+
+Accessing host memory directly from within a kernel has several advantages:
+
+* There is no need to allocate a block in device memory and copy data between this block and the block in host memory; data transfers are implicitly performed as needed by the kernel;
+
+* There is no need to use streams to overlap data transfers with kernel execution; the kernel-originated data transfers automatically overlap with kernel execution.
+
+Since mapped page-locked memory is shared between host and device however, the application must synchronize memory accesses using streams or events to avoid any potential *read-after-write*, *write-after-read*, or *write-after-write* hazards.
+
+To be able to retrieve the device pointer to any mapped page-locked memory, page-locked memory mapping must be enabled by calling `cudaSetDeviceFlags()` with the `cudaDeviceMapHost` flag before any other CUDA call is performed. Otherwise, `cudaHostGetDevicePointer()` will return an error. 
+
+`cudaHostGetDevicePointer()` also returns an error if the device does not support mapped page-locked host memory. Applications may query this capability by checking the `canMapHostMemory` device property (see Device Enumeration), which is equal to 1 for devices that support mapped page-locked host memory. 
+
+Note that atomic functions operating on mapped page-locked memory are not atomic from the point of view of the host or other devices.
+
+## Asynchronous Concurrent Execution
+CUDA exposes the following operations as independent tasks that can operate
+concurrently with one another:
+- Computation on the host;
+- Computation on the device;
+- Memory transfers from the host to the device;
+- Memory transfers from the device to the host;
+- Memory transfers within the memory of a given device;
+- Memory transfers among devices.
+
+### Concurrent Execution between Host and Device
+Concurrent host execution is facilitated through asynchronous library functions that return control to the host thread before the device completes the requested task. Using asynchronous calls, many device operations can be queued up together to be executed by the CUDA driver when appropriate device resources are available. This relieves the host thread of much of the responsibility to manage the device, leaving it free for other tasks. The following device operations are asynchronous with respect to the host:
+- Kernel launches;
+- Memory copies within a single device's memory;
+- Memory copies from host to device of a memory block of 64 KB or less;
+- Memory copies performed by functions that are suffixed with `Async`;
+- Memory set function calls.
+
+*`Async` memory copies will be synchronous if they involve host memory that is not page-locked.*
+
+### Concurrent Kernel Execution
+Some devices can execute multiple kernels concurrently. Applications may query this capability by checking the `concurrentKernels` device property, which is equal to 1 for devices that support it.
+
+The maximum number of kernel launches that a device can execute concurrently depends on its compute capability.
+
+A kernel from one CUDA context cannot execute concurrently with a kernel from another CUDA context.
+
+Kernels that use many textures or a large amount of local memory are less likely to execute concurrently with other kernels.
+
+### Overlap of Data Transfer and Kernel Execution
+Some devices can perform an asynchronous memory copy to or from the GPU concurrently with kernel execution. Applications may query this capability by checking the `asyncEngineCount` device property, which is greater than zero for devices that support it. If host memory is involved in the copy, it must be page-locked.
+
+It is also possible to perform an intra-device copy simultaneously with kernel execution and/or with copies to or from the device. Intra-device copies are initiated using the standard memory copy functions with destination and source addresses residing on the same device. 
+
+### Concurrent Data Transfers
+Some devices can overlap copies to and from the device. Applications may query this capability by checking the `asyncEngineCount` device property, which is equal to 2 for devices that support it. In order to be overlapped, any host memory involved in the transfers must be page-locked.
+
+### Streams
+Applications manage the concurrent operations described above through streams. A stream is a sequence of commands (possibly issued by different host threads) that execute in order. Different streams, on the other hand, may execute their commands out of order with respect to one another or concurrently; this behavior is not guaranteed and should therefore not be relied upon for correctness.
+
+#### Creation and Destruction
+A stream is defined by creating a stream object and specifying it as the stream parameter to a sequence of kernel launches and host <-> device memory copies. The following code sample creates two streams and allocates an array `hostPtr` of `float` in page-locked memory:
+``` c
+cudaStream_t stream[2];
+for (int i = 0; i < 2; ++i)
+    cudaStreamCreate(&stream[i]);
+float* hostPtr;
+cudaMallocHost(&hostPtr, 2 * size);
+```
+Each of these streams is defined by the following code sample as a sequence of one memory copy from host to device, one kernel launch, and one memory copy from device to host:
+``` c
+for (int i = 0; i < 2; ++i) 
+{
+    cudaMemcpyAsync(inputDevPtr + i * size, hostPtr + i * size, size, cudaMemcpyHostToDevice, stream[i]);
+    MyKernel <<<100, 512, 0, stream[i]>>>(outputDevPtr + i * size, inputDevPtr + i * size, size);
+    cudaMemcpyAsync(hostPtr + i * size, outputDevPtr + i * size, size, cudaMemcpyDeviceToHost, stream[i]);
+}
+```
+
+Each stream copies its portion of input array `hostPtr` to array `inputDevPtr` in device memory, processes `inputDevPtr` on the device by calling `MyKernel()`, and copies the result `outputDevPtr` back to the same portion of `hostPtr`. Note that `hostPtr` must point to page-locked host memory for any overlap to occur.
+
+Streams are released by calling `cudaStreamDestroy()`, which waits for all preceding commands in the given stream to complete before destroying the stream and returning control to the host thread:
+``` c
+for (int i = 0; i < 2; ++i)
+    cudaStreamDestroy(stream[i]);
+```
+
+#### Default Stream
+Kernel launches and host <-> device memory copies that do not specify any stream parameter, or equivalently that set the stream parameter to zero, are issued to the default stream. They are therefore executed in order.
+
+For code that is compiled using the `--default-stream per-thread` compilation flag (or that defines the `CUDA_API_PER_THREAD_DEFAULT_STREAM` macro before including CUDA headers (`cuda.h` and `cuda_runtime.h`)), the default stream is a regular stream and each host thread has its own default stream.
+
+For code that is compiled using the `--default-stream` legacy compilation flag, the default stream is a special stream called the `NULL` stream and each device has a single `NULL` stream used for all host threads. The `NULL` stream is special as it causes implicit synchronization as described in [Implicit Synchronization](#implicit-synchronization).
+
+For code that is compiled without specifying a `--default-stream` compilation flag, `--default-stream` legacy is assumed as the default.
 
 
 
@@ -302,7 +400,3 @@ Page-locked host memory is a scarce resource however, so allocations in page-loc
 <br>
 <br>
 <br>
-
-
-
-
