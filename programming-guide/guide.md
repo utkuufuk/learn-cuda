@@ -26,12 +26,19 @@ CUDA threads may access data from multiple memory spaces during their execution 
 ![Technical Specifications 4](images/technical-specs-4.png)
 
 # 3. PROGRAMMING INTERFACE
+## Initialization
+There is no explicit initialization function for the runtime; it initializes the first time a runtime function is called. One needs to keep this in mind when timing runtime function calls and when interpreting the error code from the first call into the runtime.
+
+During initialization, the runtime creates a CUDA [context](#contexts) for each device in the system. This context is the *primary context* for this device and it is shared among all the host threads of the application. As part of this context creation, the device code is just-in-time compiled if necessary and loaded into device memory. This all happens under the hood and the runtime does not expose the primary context to the application.
+
+When a host thread calls `cudaDeviceReset(),` this destroys the primary context of the device the host thread currently operates on. The next runtime function call made by any host thread that has this device as current will create a new primary context for this device.
+
 ## Device Memory
 Device memory can be allocated either as *linear memory* or as *CUDA arrays*. (CUDA arrays are opaque memory layouts optimized for texture fetching.)
 
 Linear memory is typically allocated using `cudaMalloc()` and freed using `cudaFree()` and data transfer between host memory and device memory are typically done using `cudaMemcpy()`.
 
-Linear memory can also be allocated through `cudaMallocPitch()` and `cudaMalloc3D()`. These functions are recommended for allocations of 2D or 3D arrays as it makes sure that the allocation is appropriately padded to meet the alignment requirements, therefore ensuring best performance when accessing the row addresses or performing copies between 2D arrays and other regions of device memory (using the `cudaMemcpy2D()` and `cudaMemcpy3D()` functions).
+Linear memory can also be allocated through `cudaMallocPitch()` and `cudaMalloc3D()`. These functions are recommended for allocations of 2D or 3D arrays as it makes sure that the allocation is appropriately padded to meet the alignment requirements described in [Device Memory Accesses](#device-memory-access), therefore ensuring best performance when accessing the row addresses or performing copies between 2D arrays and other regions of device memory (using the `cudaMemcpy2D()` and `cudaMemcpy3D()` functions).
 
 ## Shared Memory
 ### Matrix Multiplication Without Shared Memory
@@ -255,11 +262,11 @@ memory
 * `cudaHostRegister()` page-locks a range of memory allocated by `malloc()` (see reference manual for limitations) 
 
 Using page-locked host memory has several benefits:
-* Copies between page-locked host memory and device memory can be performed concurrently with kernel execution for some devices 
+* Copies between page-locked host memory and device memory can be performed concurrently with kernel execution for some devices as mentioned in [Asynchronous Concurrent Execution](#asynchronous-concurrent-execution).
 
-* On some devices, page-locked host memory can be mapped into the address space of the device, eliminating the need to copy it to or from device memory
+* On some devices, page-locked host memory can be mapped into the address space of the device, eliminating the need to copy it to or from device memory as detailed in [Mapped Memory](#mapped-memory).
 
-* On systems with a front-side bus, bandwidth between host memory and device memory is higher if host memory is allocated as page-locked and even higher if in addition it is allocated as *write-combining*
+* On systems with a front-side bus, bandwidth between host memory and device memory is higher if host memory is allocated as page-locked and even higher if in addition it is allocated as *write-combining* as described in [Write-Combining Memory](#write-combining-memory).
 
 Page-locked host memory is a scarce resource however, so allocations in page-locked memory will start failing long before allocations in pageable memory. In addition, by reducing the amount of physical memory available to the operating system for paging, consuming too much page-locked memory reduces overall system performance.
 
@@ -271,21 +278,21 @@ Write-combining memory frees up the host's L1 and L2 cache resources, making mor
 Reading from write-combining memory from the host is prohibitively slow, so write-combining memory should in general be used for memory that the host only write  to.
 
 ### Mapped Memory
-A block of page-locked host memory can also be mapped into the address space of the device by passing flag `cudaHostAllocMapped` to `cudaHostAlloc()` or by passing flag `cudaHostRegisterMapped` to `cudaHostRegister()`. Such a block has therefore in general two addresses: one in host memory that is returned by `cudaHostAlloc()` or `malloc()`, and one in device memory that can be retrieved using `cudaHostGetDevicePointer()` and then used to access the block from within a kernel. The only exception is for pointers allocated with `cudaHostAlloc()` and when a unified address space is used for the host and the device.
+A block of page-locked host memory can also be mapped into the address space of the device by passing flag `cudaHostAllocMapped` to `cudaHostAlloc()` or by passing flag `cudaHostRegisterMapped` to `cudaHostRegister()`. Such a block has therefore in general two addresses: one in host memory that is returned by `cudaHostAlloc()` or `malloc()`, and one in device memory that can be retrieved using `cudaHostGetDevicePointer()` and then used to access the block from within a kernel. The only exception is for pointers allocated with `cudaHostAlloc()` and when a [unified virtual address space](#unified-virtual-address-space) is used for the host and the device.
 
 Accessing host memory directly from within a kernel has several advantages:
 
 * There is no need to allocate a block in device memory and copy data between this block and the block in host memory; data transfers are implicitly performed as needed by the kernel;
 
-* There is no need to use streams to overlap data transfers with kernel execution; the kernel-originated data transfers automatically overlap with kernel execution.
+* There is no need to use [streams](#streams) to overlap data transfers with kernel execution; the kernel-originated data transfers automatically overlap with kernel execution.
 
-Since mapped page-locked memory is shared between host and device however, the application must synchronize memory accesses using streams or events to avoid any potential *read-after-write*, *write-after-read*, or *write-after-write* hazards.
+Since mapped page-locked memory is shared between host and device however, the application must synchronize memory accesses using streams or events (see [Asynchronous Concurrent Execution](#asynchronous-concurrent-execution)) to avoid any potential *read-after-write*, *write-after-read*, or *write-after-write* hazards.
 
 To be able to retrieve the device pointer to any mapped page-locked memory, page-locked memory mapping must be enabled by calling `cudaSetDeviceFlags()` with the `cudaDeviceMapHost` flag before any other CUDA call is performed. Otherwise, `cudaHostGetDevicePointer()` will return an error. 
 
 `cudaHostGetDevicePointer()` also returns an error if the device does not support mapped page-locked host memory. Applications may query this capability by checking the `canMapHostMemory` device property (see Device Enumeration), which is equal to 1 for devices that support mapped page-locked host memory. 
 
-Note that atomic functions operating on mapped page-locked memory are not atomic from the point of view of the host or other devices.
+Note that [atomic functions](#atomic-functions) operating on mapped page-locked memory are not atomic from the point of view of the host or other devices.
 
 ## Asynchronous Concurrent Execution
 CUDA exposes the following operations as independent tasks that can operate
