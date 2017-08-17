@@ -396,10 +396,45 @@ The amount of execution overlap between two streams depends on the order in whic
 
 On devices that support [concurrent data transfers](#concurrent-data-transfers), the two streams of the code sample of [Creation and Destruction](#creation-and-destruction) do overlap: The memory copy from host to device issued to `stream[1]` overlaps with the memory copy from device to host issued to `stream[0]` and even with the kernel launch issued to `stream[0]` (assuming the device supports [overlap of data transfer and kernel execution](#overlap-of-data-transfer-and-kernel-execution)).
 
+#### Callbacks
+The runtime provides a way to insert a callback at any point into a stream via `cudaStreamAddCallback().`  A callback is a function that is executed on the host once all commands issued to the stream before the callback have completed. Callbacks in stream 0 are executed once all preceding tasks and commands issued in all streams before the callback have completed.
 
+The following code sample adds the callback function MyCallback to each of two streams after issuing a host-to-device memory copy, a kernel launch and a device-to-host memory copy into each stream. The callback will begin execution on the host after each of the device-to-host memory copies completes.
+``` c
+void CUDART_CB MyCallback(cudaStream_t stream, cudaError_t status, void *data)
+{
+    printf("Inside callback %d\n", (size_t) data);
+}
 
+...
 
+for (size_t i = 0; i < 2; ++i) 
+{
+    cudaMemcpyAsync(devPtrIn[i], hostPtr[i], size, cudaMemcpyHostToDevice, stream[i]);
+    MyKernel<<<100, 512, 0, stream[i]>>>(devPtrOut[i], devPtrIn[i], size);
+    cudaMemcpyAsync(hostPtr[i], devPtrOut[i], size, cudaMemcpyDeviceToHost, stream[i]);
+    cudaStreamAddCallback(stream[i], MyCallback, (void*) i, 0);
+}
+```
 
+The commands that are issued in a stream after a callback do not start executing before the callback has completed. The last parameter of `cudaStreamAddCallback()` is reserved for future use.
+
+*A callback must not make CUDA API calls (directly or indirectly), as it might end up waiting on itself if it makes such a call leading to a deadlock.*
+
+#### Stream Priorities
+The relative priorities of streams can be specified at creation using `cudaStreamCreateWithPriority().` The range of allowable priorities can be obtained using the `cudaDeviceGetStreamPriorityRange()` function. At runtime, as blocks in low-priority schemes finish, waiting blocks in higher-priority streams are scheduled in their place.
+
+The following code sample obtains the allowable range of priorities for the current device, and creates streams with the highest and lowest available priorities:
+``` c
+// get the range of stream priorities for this device
+int priority_high, priority_low;
+cudaDeviceGetStreamPriorityRange(&priority_low, &priority_high);
+
+// create streams with highest and lowest available priorities
+cudaStream_t st_high, st_low;
+cudaStreamCreateWithPriority(&st_high, cudaStreamNonBlocking, priority_high);
+cudaStreamCreateWithPriority(&st_low, cudaStreamNonBlocking, priority_low);
+```
 
 
 
