@@ -334,7 +334,7 @@ Some devices can overlap copies to and from the device. Applications may query t
 ### Streams
 Applications manage the concurrent operations described above through streams. A stream is a sequence of commands (possibly issued by different host threads) that execute in order. Different streams, on the other hand, may execute their commands out of order with respect to one another or concurrently; this behavior is not guaranteed and should therefore not be relied upon for correctness.
 
-#### Creation and Destruction
+#### Stream Creation and Destruction
 A stream is defined by creating a stream object and specifying it as the stream parameter to a sequence of kernel launches and host <-> device memory copies. The following code sample creates two streams and allocates an array `hostPtr` of `float` in page-locked memory:
 ``` c
 cudaStream_t stream[2];
@@ -394,7 +394,7 @@ Two commands from different streams cannot run concurrently if any one of the fo
 #### Overlapping Behavior
 The amount of execution overlap between two streams depends on the order in which the commands are issued to each stream and whether or not the device supports [overlap of data transfer and kernel execution](#overlap-of-data-transfer-and-kernel-execution), [concurrent kernel execution](#concurrent-kernel-execution), and/or [concurrent data transfers](#concurrent-data-transfers).
 
-On devices that support [concurrent data transfers](#concurrent-data-transfers), the two streams of the code sample of [Creation and Destruction](#creation-and-destruction) do overlap: The memory copy from host to device issued to `stream[1]` overlaps with the memory copy from device to host issued to `stream[0]` and even with the kernel launch issued to `stream[0]` (assuming the device supports [overlap of data transfer and kernel execution](#overlap-of-data-transfer-and-kernel-execution)).
+On devices that support [concurrent data transfers](#concurrent-data-transfers), the two streams of the code sample of [Stream Creation and Destruction](#stream-creation-and-destruction) do overlap: The memory copy from host to device issued to `stream[1]` overlaps with the memory copy from device to host issued to `stream[0]` and even with the kernel launch issued to `stream[0]` (assuming the device supports [overlap of data transfer and kernel execution](#overlap-of-data-transfer-and-kernel-execution)).
 
 #### Callbacks
 The runtime provides a way to insert a callback at any point into a stream via `cudaStreamAddCallback().`  A callback is a function that is executed on the host once all commands issued to the stream before the callback have completed. Callbacks in stream 0 are executed once all preceding tasks and commands issued in all streams before the callback have completed.
@@ -435,6 +435,63 @@ cudaStream_t st_high, st_low;
 cudaStreamCreateWithPriority(&st_high, cudaStreamNonBlocking, priority_high);
 cudaStreamCreateWithPriority(&st_low, cudaStreamNonBlocking, priority_low);
 ```
+
+### Events
+The runtime provides a way to closely monitor the device's progress, as well as perform accurate timing, by letting the application asynchronously record events at any point in the program and query when these events are completed. An event has completed when all tasks - or optionally, all commands in a given stream - preceding the event have completed. Events in stream 0 are completed after all preceding tasks and commands in all streams are completed.
+
+#### Event Creation and Destruction
+``` c
+// create two events
+cudaEvent_t start, stop;
+cudaEventCreate(&start);
+cudaEventCreate(&stop)
+
+// destroy the events
+cudaEventDestroy(start);
+cudaEventDestroy(stop);
+```
+#### Elapsed Time
+The events created above can be used to time the code sample of [Stream Creation and Destruction](#stream-creation-and-destruction) the following way:
+``` c
+cudaEventRecord(start, 0);
+
+for (int i = 0; i < 2; ++i) 
+{
+    cudaMemcpyAsync(inputDev + i * size, inputHost + i * size, size, cudaMemcpyHostToDevice, stream[i]);
+    MyKernel<<<100, 512, 0, stream[i]>>>(outputDev + i * size, inputDev + i * size, size);
+    cudaMemcpyAsync(outputHost + i * size, outputDev + i * size, size, cudaMemcpyDeviceToHost, stream[i]);
+}
+cudaEventRecord(stop, 0);
+cudaEventSynchronize(stop);
+float elapsedTime;
+cudaEventElapsedTime(&elapsedTime, start, stop);
+```
+
+### Synchronous Calls
+When a synchronous function is called, control is not returned to the host thread before the device has completed the requested task. Whether the host thread will then yield, block, or spin can be specified by calling `cudaSetDeviceFlags()` with some specific flags before any other CUDA call is performed by the host thread.
+
+## Unified Virtual Address Space
+When the application is run as a 64-bit process, a single address space is used for the host and all the devices. All host memory allocations made via CUDA API calls and all device memory allocations on supported devices are within this virtual address range. As a consequence:
+
+ * The location of any memory on the host allocated through CUDA, or on any of the devices which use the unified address space, can be determined from the value of the pointer using `cudaPointerGetAttributes().`
+
+ * When copying to or from the memory of any device which uses the unified address space, the `cudaMemcpyKind` parameter of `cudaMemcpy*()` can be set to `cudaMemcpyDefault` to determine locations from the pointers. This also works for host pointers not allocated through CUDA, as long as the current device uses unified addressing.
+
+Applications may query if the unified address space is used for a particular device by checking that the `unifiedAddressing` device property is equal to 1.
+
+## Error Checking
+All runtime functions return an error code, but for an [asynchronous function](#asynchronous-concurrent-execution), this error code cannot possibly report any of the asynchronous errors that could occur on the device since the function returns before the device has completed the task; the error code only reports errors that occur on the host prior to executing the task, typically related to parameter validation; if an asynchronous error occurs, it will be reported by some subsequent unrelated runtime function call.
+
+The only way to check for asynchronous errors just after some asynchronous function call is therefore to synchronize just after the call by calling `cudaDeviceSynchronize()` (or by using any other [synchronization mechanisms](#asynchronous-concurrent-execution)) and checking the error code returned by `cudaDeviceSynchronize().`
+
+The runtime maintains an error variable for each host thread that is initialized to `cudaSuccess` and is overwritten by the error code every time an error occurs (be it a parameter validation error or an asynchronous error). `cudaPeekAtLastError()` returns this variable. `cudaGetLastError()` returns this variable and resets it to `cudaSuccess.`
+
+Kernel launches do not return any error code, so `cudaPeekAtLastError()` or `cudaGetLastError()` must be called just after the kernel launch to retrieve any pre-launch errors. To ensure that any error returned by `cudaPeekAtLastError()` or `cudaGetLastError()` does not originate from calls prior to the kernel launch, one has to make sure that the runtime error variable is set to `cudaSuccess` just before the kernel launch, for example, by calling `cudaGetLastError()` just before the kernel launch. Kernel launches are asynchronous, so to check for asynchronous errors, the application must synchronize in-between the kernel launch and the call to `cudaPeekAtLastError()` or `cudaGetLastError().`
+
+Note that `cudaErrorNotReady` that may be returned by `cudaStreamQuery()` and `cudaEventQuery()` is not considered an error and is therefore not reported by `cudaPeekAtLastError()` or `cudaGetLastError().`
+
+
+
 
 
 
