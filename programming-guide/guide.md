@@ -290,7 +290,7 @@ Since mapped page-locked memory is shared between host and device however, the a
 
 To be able to retrieve the device pointer to any mapped page-locked memory, page-locked memory mapping must be enabled by calling `cudaSetDeviceFlags()` with the `cudaDeviceMapHost` flag before any other CUDA call is performed. Otherwise, `cudaHostGetDevicePointer()` will return an error. 
 
-`cudaHostGetDevicePointer()` also returns an error if the device does not support mapped page-locked host memory. Applications may query this capability by checking the `canMapHostMemory` device property (see Device Enumeration), which is equal to 1 for devices that support mapped page-locked host memory. 
+`cudaHostGetDevicePointer()` also returns an error if the device does not support mapped page-locked host memory. Applications may query this capability by checking the `canMapHostMemory` device property, which is equal to 1 for devices that support mapped page-locked host memory. 
 
 Note that [atomic functions](#atomic-functions) operating on mapped page-locked memory are not atomic from the point of view of the host or other devices.
 
@@ -370,9 +370,31 @@ For code that is compiled using the `--default-stream` legacy compilation flag, 
 
 For code that is compiled without specifying a `--default-stream` compilation flag, `--default-stream` legacy is assumed as the default.
 
+#### Explicit Synchronization
+There are various ways to explicitly synchronize streams with each other.
 
+**`cudaDeviceSynchronize()`** waits until all preceding commands in all streams of all host threads have completed.
 
+**`cudaStreamSynchronize()`** takes a stream as a parameter and waits until all preceding commands in the given stream have completed. It can be used to synchronize the host with a specific stream, allowing other streams to continue executing on the device.
 
+**`cudaStreamWaitEvent()`** takes a stream and an [event](#events) as parameters and makes all the commands added to the given stream after the call to `cudaStreamWaitEvent()` delay their execution until the given event has completed. The stream can be 0, in which case all the commands added to any stream after the call to `cudaStreamWaitEvent()` wait on the event.
+
+**`cudaStreamQuery()`** provides applications with a way to know if all preceding commands in a stream have completed.
+
+*To avoid unnecessary slowdowns, all these synchronization functions are usually best used for timing purposes or to isolate a launch or memory copy that is failing.*
+
+#### Implicit Synchronization
+Two commands from different streams cannot run concurrently if any one of the following operations is issued in-between them by the host thread:
+* a page-locked host memory allocation,
+* a device memory allocation,
+* a device memory set,
+* a memory copy between two addresses to the same device memory,
+* any CUDA command to the NULL stream.
+
+#### Overlapping Behavior
+The amount of execution overlap between two streams depends on the order in which the commands are issued to each stream and whether or not the device supports [overlap of data transfer and kernel execution](#overlap-of-data-transfer-and-kernel-execution), [concurrent kernel execution](#concurrent-kernel-execution), and/or [concurrent data transfers](#concurrent-data-transfers).
+
+On devices that support [concurrent data transfers](#concurrent-data-transfers), the two streams of the code sample of [Creation and Destruction](#creation-and-destruction) do overlap: The memory copy from host to device issued to `stream[1]` overlaps with the memory copy from device to host issued to `stream[0]` and even with the kernel launch issued to `stream[0]` (assuming the device supports [overlap of data transfer and kernel execution](#overlap-of-data-transfer-and-kernel-execution)).
 
 
 
