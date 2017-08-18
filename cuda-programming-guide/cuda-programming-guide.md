@@ -1,4 +1,28 @@
-# 2. PROGRAMMING MODEL
+# List of Contents
+* [PROGRAMMING MODEL](#programming-model)
+  * [Thread Hierarchy](#thread-hierarchy)
+  * [Memory Hierarchy](#memory-hierarchy)
+  * [Compute Capability](#compute-capability)
+* [PROGRAMMING INTERFACE](#programming-interface)
+  * [Initialization](#initialization)
+  * [Device Memory](#device-memory)
+  * [Shared Memory](#shared-memory)
+  * [Page-Locked Host Memory](#page-locked-host-memory)
+  * [Asynchronous Concurrent Execution](#asynchronous-concurrent-execution)
+    * [Concurrent Execution Between Host and Device](#concurrent-execution-between-host-and-device)
+    * [Concurrent Kernel Execution](#concurrent-kernel-execution)
+    * [Overlap of Data Transfer and Kernel Execution](#overlap-of-data-transfer-and-kernel-execution)
+    * [Concurrent Data Transfers](#concurrent-data-transfers)
+    * [Streams](#streams)
+    * [Events](#events)
+    * [Synchronous Calls](#synchronous-calls)
+  * [Unified Virtual Address Space](#unified-virtual-address-space)
+  * [Error Checking](#error-checking)
+* [HARDWARE IMPLEMENTATION](#hardware-implementation)
+  * [Streaming Multiprocessors](#streaming-multiprocessors)
+  * [Warps](#warps)
+
+#  PROGRAMMING MODEL
 ## Thread Hierarchy
 One can specify synchronization points in the kernel by calling the `__syncthreads()` intrinsic function; `__syncthreads()` acts as a barrier at which all threads in the block must wait before any is allowed to proceed.
 
@@ -19,7 +43,7 @@ CUDA threads may access data from multiple memory spaces during their execution 
 ![Technical Specifications 3](images/technical-specs-3.png)
 ![Technical Specifications 4](images/technical-specs-4.png)
 
-# 3. PROGRAMMING INTERFACE
+# PROGRAMMING INTERFACE
 ## Initialization
 There is no explicit initialization function for the runtime; it initializes the first time a runtime function is called. One needs to keep this in mind when timing runtime function calls and when interpreting the error code from the first call into the runtime.
 
@@ -484,7 +508,7 @@ Kernel launches do not return any error code, so `cudaPeekAtLastError()` or `cud
 
 Note that `cudaErrorNotReady` that may be returned by `cudaStreamQuery()` and `cudaEventQuery()` is not considered an error and is therefore not reported by `cudaPeekAtLastError()` or `cudaGetLastError().`
 
-# 4. HARDWARE IMPLEMENTATION
+# HARDWARE IMPLEMENTATION
 ## Streaming Multiprocessors
 The NVIDIA GPU architecture is built around a scalable array of multithreaded *Streaming Multiprocessors* (SMs). When a CUDA program on the host CPU invokes a kernel grid, the blocks of the grid are enumerated and distributed to multiprocessors with available execution capacity. The threads of a thread block execute concurrently on one multiprocessor, and multiple thread blocks can execute concurrently on one multiprocessor. As thread blocks terminate, new blocks are launched on the vacated multiprocessors.
 
