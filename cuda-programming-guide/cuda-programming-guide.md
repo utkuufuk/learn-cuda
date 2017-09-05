@@ -21,6 +21,14 @@
 * [HARDWARE IMPLEMENTATION](#hardware-implementation)
   * [Streaming Multiprocessors](#streaming-multiprocessors)
   * [Warps](#warps)
+* [PERFORMANCE GUIDELINES](#performance-guidelines)
+  * [Maximizing Utilization](#maximizing-utilization)
+    * [Application Level](#application-level)
+    * [Device Level](#device-level)
+    * [Multiprocessor Level](#multiprocessor-level)
+  * [Maximizing Memory Throughput](#maximizing-memory-throughput)
+    * [Data Transfer Between Host and Device](#data-transfer-between-host-and-device)
+    * [Device Memory Accesses](#device-memory-accesses)
 
 #  PROGRAMMING MODEL
 ## Thread Hierarchy
@@ -526,6 +534,71 @@ A warp executes one common instruction at a time, so full efficiency is realized
 The threads of a warp that are on that warp's current execution path are called the *active threads*, whereas threads not on the current path are *inactive* (disabled). Threads can be inactive because they have exited earlier than other threads of their warp, or because they are on a different branch path than the branch path currently executed by the warp, or because they are the last threads of a block whose number of threads is not a multiple of the warp size.
 
 The number of blocks and warps that can reside and be processed together on the multiprocessor for a given kernel depends on the amount of registers and shared memory used by the kernel and the amount of registers and shared memory available on the multiprocessor. There are also a maximum number of resident blocks and a maximum number of resident warps per multiprocessor. These limits as well the amount of registers and shared memory available on the multiprocessor are a function of the [compute capability](#compute-capability) of the device . If there are not enough registers or shared memory available per multiprocessor to process at least one block, the kernel will fail to launch.
+
+# PERFORMANCE GUIDELINES
+## Maximizing Utilization
+### Application Level
+At a high level, the application should maximize parallel execution between the host, the devices, and the bus connecting the host to the devices, by using asynchronous functions calls and streams as described in [Asynchronous Concurrent Execution](#asynchoronous-concurrent-execution). It should assign to each processor the type of work it does best: serial workloads to the host; parallel workloads to the devices.
+
+For the parallel workloads, at points in the algorithm where parallelism is broken because some threads need to synchronize in order to share data with each other, there are two cases: Either these threads belong to the same block, in which case they should use `__syncthreads()` and share data through shared memory within the same kernel invocation, or they belong to different blocks, in which case they must share data through global memory using two separate kernel invocations, one for writing to and one for reading from global memory. The second case is much less optimal since it adds the overhead of extra kernel invocations and global memory traffic. Its occurrence should therefore be minimized by mapping the algorithm to the CUDA programming model in such a way that the computations that require inter-thread communication are performed within a single thread block as much as possible.
+
+### Device Level
+Multiple kernels can execute concurrently on a device, so maximum utilization can also be achieved by using streams to enable enough kernels to execute concurrently as described in [Asynchronous Concurrent Execution](#asynchoronous-concurrent-execution).
+
+### Multiprocessor Level
+Utilization is directly linked to the number of resident warps.
+
+The number of blocks and warps residing on each multiprocessor for a given kernel call depends on the [execution configuration](#execution-configuration) of the call, the memory resources of the multiprocessor, and the resource requirements of the kernel.
+
+The total amount of shared memory required for a block is equal to the sum of the amount of statically allocated shared memory and the amount of dynamically allocated shared memory.
+
+The number of registers used by a kernel can have a significant impact on the number of resident warps. For example, for devices of compute capability 2.x, if a kernel uses 32 registers and each block has 512 threads and requires very little shared memory, then two blocks (i.e., 32 warps) can reside on the multiprocessor since they require 2x512x32 registers, which exactly matches the number of registers available on the multiprocessor. But as soon as the kernel uses one more register, only one block (i.e., 16 warps) can be resident since two blocks would require 2x512x17 registers, which are more registers than are available on the multiprocessor. Therefore, the compiler attempts to minimize register usage while keeping register spilling (see [Device Memory Accesses](#device-memory-accesses)) and the number of instructions to a minimum. Register usage can be controlled using the **`maxrregcount`** compiler option or launch bounds as described in [Launch Bounds](#launch-bounds).
+
+Each **`double`** variable and each long long variable uses two registers.
+
+The effect of execution configuration on performance for a given kernel call generally depends on the kernel code. Experimentation is therefore recommended. Applications can also parameterize execution configurations based on register file size and shared memory size, which depends on the compute capability of the device, as well as on the number of multiprocessors and memory bandwidth of the device, all of which can be queried using the runtime.
+
+The number of threads per block should be chosen as a multiple of the warp size to avoid wasting computing resources with under-populated warps as much as possible.
+
+## Maximizing Memory Throughput
+The first step in maximizing overall memory throughput for the application is to minimize data transfers with low bandwidth.
+
+That means minimizing data transfers between the host and the device, since these have much lower bandwidth than data transfers between global memory and the device.
+
+That also means minimizing data transfers between global memory and the device by maximizing use of on-chip memory: shared memory and caches.
+
+The throughput of memory accesses by a kernel can vary by an order of magnitude depending on access pattern for each type of memory. The next step in maximizing memory throughput is therefore to organize memory accesses as optimally as possible based on the optimal memory access patterns described in [Device Memory Accesses](#device-memory-accesses). This optimization is especially important for global memory accesses as global memory bandwidth is low, so non-optimal global memory accesses have a higher impact on performance.
+
+### Data Transfer Between Host and Device
+Applications should strive to minimize data transfer between the host and the device. One way to accomplish this is to move more code from the host to the device, even if that means running kernels with low parallelism computations. Intermediate data structures may be created in device memory, operated on by the device, and destroyed without ever being mapped by the host or copied to host memory.
+
+Also, because of the overhead associated with each transfer, batching many small transfers into a single large transfer always performs better than making each transfer separately.
+
+On systems with a front-side bus, higher performance for data transfers between host and device is achieved by using page-locked host memory as described in Page-Locked Host Memory.
+
+In addition, when using mapped page-locked memory ([Mapped Memory](#mapped-memory)), there is no need to allocate any device memory and explicitly copy data between device and host memory. Data transfers are implicitly performed each time the kernel accesses the mapped memory. For maximum performance, these memory accesses must be coalesced as with accesses to global memory (see [Device Memory Accesses](#device-memory-accesses)). Assuming that they are and that the mapped memory is read or written only once, using mapped page-locked memory instead of explicit copies between device and host memory can be a win for performance.
+
+### Device Memory Accesses
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
