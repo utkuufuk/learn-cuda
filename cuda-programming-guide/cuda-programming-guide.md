@@ -576,12 +576,11 @@ Also, because of the overhead associated with each transfer, batching many small
 
 On systems with a front-side bus, higher performance for data transfers between host and device is achieved by using page-locked host memory as described in Page-Locked Host Memory.
 
-In addition, when using mapped page-locked memory ([Mapped Memory](#mapped-memory)), there is no need to allocate any device memory and explicitly copy data between device and host memory. Data transfers are implicitly performed each time the kernel accesses the mapped memory. For maximum performance, these memory accesses must be coalesced as with accesses to global memory (see [Device Memory Accesses](#device-memory-accesses)). Assuming that they are and that the mapped memory is read or written only once, using mapped page-locked memory instead of explicit copies between device and host memory can be a win for performance.
+In addition, when using mapped page-locked memory ([Mapped Memory](#mapped-memory)), there is no need to allocate any device memory and explicitly copy data between device and host memory. Data transfers are implicitly performed each time the kernel accesses the mapped memory. For maximum performance, these memory accesses must be coalesced as with accesses to global memory. Assuming that they are and that the mapped memory is read or written only once, using mapped page-locked memory instead of explicit copies between device and host memory can be a win for performance.
 
-### Device Memory Accesses
-
-
-
+## Maximizing Instruction Throughput
+### Arithmetic Instructions
+In general, code compiled with **`-ftz=true`** (denormalized numbers are flushed to zero) tends to have higher performance than code compiled with **`-ftz=false`**. Similarly, code compiled with **`-prec div=false`** (less precise division) tends to have higher performance code than code compiled with **`-prec div=true`** , and code compiled with **`-prec-sqrt=false`** (less precise square root) tends to have higher performance than code compiled with **`-prec-sqrt=true`**.
 
 
 
